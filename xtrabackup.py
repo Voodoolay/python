@@ -70,41 +70,76 @@ class BackupLog:
 
 class MakeBackup:
     def __init__(self):
-        self.comm_full = "innobackupex --slave-info --parallel=4 --no-timestamp "+DailyDir+NowDate+"_full"
-        self.comm_inc = "innobackupex --slave-info --parallel=4 --no-timestamp --incremental"
-        self.comm_finc = "innobackupex --slave-info --parallel=4 --no-timestamp --incremental --incremental-basedir="
-
+        global BackupLogDir
+        global DailyDir
+        global NowDate
+        self.comm_full = "innobackupex --slave-info --parallel=4 --no-timestamp "+DailyDir+NowDate+"_full >> "+BackupLogDir+NowDate"_full.log 2>&1"
+        self.comm_inc = "innobackupex --slave-info --parallel=4 --no-timestamp --incremental "+DailyDir+NowDate+"_inc --incremental-basedir="
     def MkFull(self):
         return subprocess.call(self.comm_full)    
-    def MkInc(self):
-        return subprocess.call(self.comm_inc)
-    def MkFinc(self):
-        return subprocess.call(self.comm_finc)
+    def MkInc(self,arg_last_inc):
+        return subprocess.call(self.comm_inc+arg_last_inc+" >> "+BackupLogDir+NowDate"_inc.log 2>&1")
+    def MkFinc(self,arg_last_full):
+        return subprocess.call(self.comm_inc+arg_last_full+" >> "+BackupLogDir+NowDate"_inc.log 2>&1")
         
 Stts = Stats()
 BkpLg = BackupLog()
 MkBkp = MakeBackup()
 Past = datetime.strptime(Stts.GetLastFull(), '%Y-%m-%d-%H:%M')
+IPast = datetime.strptime(Stts.GetLastInc(), '%Y-%m-%d-%H:%M')
 if Stts.GetLastFull() == '0':
     BkpLg.AddLineFull('Brain: No Full Backups found in stats. Starting new full backup')
     if MkBkp.MkFull() != 0:
-        Stts.SetLastLogPath(BackupLogDir+NowDate"_full.log")
         Stts.SetErrors()
         Stts.GetWriten()
         BkpLg.AddLineFull('Brain: Failed create new full backup. Look in to '+BackupLogDir+NowDate"_full.log for a problem")
+        exit 1
+    else:
+        Stts.SetLastLogPath(BackupLogDir+NowDate"_full.log")
+        Stts.SetLastFull(NowDate)
+        Stts.SetLastFullPath(DailyDir+NowDate+"_full/")
+
 elif ((Now - Past).total_seconds() / 60 / 60 >= HoursBeforeFull and
-    Now.strftime('%H') >= FullStarthour):
-            BkpLg.AddLineFull('Brain: Full Backup created more than 24H ago. Starting new full backup')
-            if MkBkp.MkFull() != 0:
-                Stts.SetLastLogPath(BackupLogDir+NowDate"_full.log")
-                Stts.SetErrors()
-                Stts.GetWriten()
-                BkpLg.AddLineFull('Brain: Failed create new full backup. Look in to '+BackupLogDir+NowDate"_full.log for a problem")
-elif Now -
-    
-    
+    int(Now.strftime('%H')) >= FullStarthour):
+        BkpLg.AddLineFull('Brain: Full Backup created more than 24H ago. Starting new full backup')
+        if MkBkp.MkFull() != 0:
+            Stts.SetErrors()
+            Stts.GetWriten()
+            BkpLg.AddLineFull('Brain: Failed create new full backup. Look in to '+BackupLogDir+NowDate"_full.log for a problem")
+            exit 1
+        else:
+            Stts.SetLastLogPath(BackupLogDir+NowDate"_full.log")
+            Stts.SetLastFull(NowDate)
+            Stts.SetLastFullPath(DailyDir+NowDate+"_full/")
+
+elif (IPast < Past and 
+    int((Now.strftime('%H')) < FullStarthour and 
+    (Now - Past).total_seconds() / 60 / 60) >= HoursBeforeInc):
+        BkpLg.AddLineInc('Brain: Starting new incremental from full '+Stts.GetLastInc()+' backup')
+        if MkBkp.MkFInc(Stts.GetLastFullPath()) != 0:
+            Stts.SetErrors()
+            Stts.GetWriten()
+            BkpLg.AddLineInc('Brain: Failed create new inc backup. Look in to '+BackupLogDir+NowDate"_inc.log for a problem")
+            exit 1
+        else:
+            Stts.SetLastLogPath(BackupLogDir+NowDate"_inc.log")
+            Stts.SetLastInc(NowDate)
+            Stts.SetLastIncPath(DailyDir+NowDate+"_inc/")
+elif (IPast > Past and 
+    int(Now.strftime('%H')) < FullStarthour and 
+    (Now - Past).total_seconds() / 60 / 60) >= HoursBeforeInc):
+        BkpLg.AddLineInc('Brain: Starting new incremental from incremental '+Stts.GetLastInc()+' backup')
+        if MkBkp.MkInc(GetLastIncPath()) != 0:
+            Stts.SetErrors()
+            Stts.GetWriten()
+            BkpLg.AddLineInc('Brain: Failed create new inc backup. Look in to '+BackupLogDir+NowDate"_inc.log for a problem")
+            exit 1
+        else:
+            Stts.SetLastInc(NowDate)
+            Stts.SetLastLogPath(BackupLogDir+NowDate"_inc.log")
+            Stts.SetLastIncPath(DailyDir+NowDate+"_inc/")
 else:
-        
-
-
+    print "Nothing to do here"
+    exit 1
+GetWriten()
 exit 0
